@@ -64,7 +64,7 @@ void processData( concurrentQueue< PacketData > & inputQueue,
 //******************************************************************************
 
 void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexGreaterThan > & outputQueue,
-                 int port ) {
+                 const std::string & strHostName, int port ) {
     struct sockaddr_in si_other;
 
     int sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
@@ -73,14 +73,10 @@ void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexGreaterThan
         die( "socket" );
     }
 
-    printf( "\n------------------> port %d\n", port );
-
     bzero( &si_other, sizeof( si_other ) );
 
     si_other.sin_family = AF_INET;
     si_other.sin_port = htons( port );
-
-    std::string strHostName = "127.0.0.1";
 
     if ( inet_aton( strHostName.c_str( ), &si_other.sin_addr ) == 0 ) {
         die( "inet_aton( ) failed\n" );
@@ -94,7 +90,6 @@ void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexGreaterThan
 
     while ( true ) {
         printTime( "output thread is waiting for a packet" );
-
         outputQueue.waitForIndexAndPop( nPacketIndex, data );
         printTime( "output thread got a packet off the queue" );
 
@@ -119,12 +114,13 @@ void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexGreaterThan
 
 int main( int argc, char * argv[ ] ) {
     if ( argc < 3 ) {
-        std::cerr << "usage:  " << argv[ 0 ] << " port_in port_out" << std::endl;
+        std::cerr << "usage:  " << argv[ 0 ] << " port_in hostname port_out" << std::endl;
         exit( 1 );
     }
 
-    int portIn = std::stoi( argv[ 1 ] );
-    int portOut = std::stoi( argv[ 2 ] );
+    int portIn = std::stoi( argv[ 1 ] );    // port in
+    std::string strHostName = argv[ 2 ];    // hostname out
+    int portOut = std::stoi( argv[ 3 ] );   // port out
 
     struct sockaddr_in si_server,
                        si_client;
@@ -166,7 +162,8 @@ int main( int argc, char * argv[ ] ) {
         threads[ i ].detach( );
     }
 
-    std::thread outputThread( outputData, std::ref( outputQueue ), portOut );
+    std::thread outputThread( outputData, std::ref( outputQueue ),
+                              std::cref( strHostName ), portOut );
     outputThread.detach( );
 
     // keep listening for data

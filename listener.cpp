@@ -58,8 +58,8 @@ int main( int argc, char * argv[ ] ) {
         exit( 0 );
     }
 
-    int port = std::stoi( argv[ 1 ] );
-    std::string strFileName = argv[ 2 ];
+    int port = std::stoi( argv[ 1 ] );      // port
+    std::string strFileName = argv[ 2 ];    // output file name
 
     struct sockaddr_in si_other;
 

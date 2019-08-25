@@ -96,49 +96,8 @@ void transformPacket( const PacketData & oldPacket, PacketData & newPacket ) {
 //          }
     }
 
-    //std::default_random_engine generator;
-    //std::uniform_int_distribution< int > distribution( 100, 2000 );
-    //int nMS = distribution( generator );
-    int nMS = 100 + rand( ) % 1000;
+    int nMS = rand( ) % 5000;
 
-    std::cout << "sleep " << nMS << " ms (thread: " << getThreadID( ) << ")" << std::endl;
-
-    //std::this_thread::sleep_for( std::chrono::milliseconds( distribution( generator ) ) );
     std::this_thread::sleep_for( std::chrono::milliseconds( nMS ) );
-
-    //printf( "here: (size: %d) '%s'\n", newPacket.used, newPacket.buffer );
-}
-
-
-//******************************************************************************
-//
-//  createUDPSocket
-//
-//******************************************************************************
-
-int createUDPSocket( int nPort, struct sockaddr_in & si_client ) {
-    struct sockaddr_in si_server;
-
-    // create a UDP socket
-    int sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
-
-	if ( sockfd == -1 ) {
-		die( "failed to create socket" );
-	}
-
-	// zero out the structure
-    bzero( &si_server, sizeof( si_server ) );
-
-	si_server.sin_family = AF_INET;
-	si_server.sin_port = htons( nPort );
-	si_server.sin_addr.s_addr = htonl( INADDR_ANY );
-
-	// bind socket to port
-	if ( bind( sockfd, ( struct sockaddr * ) &si_server, sizeof( si_server ) ) == -1 ) {
-		die( "bind" );
-	}
-
-
-    return sockfd;
 }
 
