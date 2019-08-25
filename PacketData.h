@@ -4,9 +4,12 @@
 //
 //******************************************************************************
 
+#ifndef __PacketData_h__
+#define __PacketData_h__
+
 #include <string.h>
 
-constexpr int PACKET_DATA_SIZE = 4096;    // Max length of buffer
+constexpr int PACKET_DATA_SIZE = 1024;    // Max length of buffer
 
 
 //******************************************************************************
@@ -37,4 +40,6 @@ struct PacketDataIndexLessThan {
         return lhs.index < rhs.index;
     }
 };
+
+#endif
 

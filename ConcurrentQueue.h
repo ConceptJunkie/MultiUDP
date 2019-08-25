@@ -1,10 +1,13 @@
 //******************************************************************************
 //
-//  concurrentQueue.h
+//  ConcurrentQueue.h
 //
 //  adapted from https://www.justsoftwaresolutions.co.uk/threading/implementing-a-thread-safe-queue-using-condition-variables.html
 //
 //******************************************************************************
+
+#ifndef __ConcurrentQueue_h__
+#define __ConcurrentQueue_h__
 
 #include <condition_variable>
 #include <mutex>
@@ -114,4 +117,6 @@ class concurrentPriorityQueue {
             m_queue.pop( );
         }
 };
+
+#endif
 

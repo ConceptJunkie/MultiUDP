@@ -11,11 +11,9 @@
 #include <map>
 #include <random>
 #include <sstream>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <string>
 #include <thread>
+
 #include <unistd.h>
 
 #include <arpa/inet.h>
@@ -24,94 +22,9 @@
 
 #include "ConcurrentQueue.h"
 #include "PacketData.h"
+#include "utils.h"
 
 #define THREADS     8
-
-long long sinceEpoch = std::chrono::duration_cast< std::chrono::milliseconds >( std::chrono::steady_clock::now( ).time_since_epoch( ) ).count( );
-
-
-//******************************************************************************
-//
-//  die
-//
-//******************************************************************************
-
-void die( const char * s ) {
-    perror( s );
-    exit( 1 );
-}
-
-
-//******************************************************************************
-//
-//  getThreadID
-//
-//******************************************************************************
-
-int getThreadID( ) {
-    static int threads = 0;
-    static std::map< std::thread::id, int > threadMap;
-
-    std::thread::id threadID = std::this_thread::get_id( );
-
-    auto it = threadMap.find( threadID );
-
-    if ( it == threadMap.end( ) ) {
-        threadMap.emplace( threadID, threads++ );
-        return threads - 1;
-    } else {
-        return it->second;
-    }
-}
-
-
-//******************************************************************************
-//
-//  printTime
-//
-//******************************************************************************
-
-void printTime( const std::string & strTag ) {
-    std::stringstream ss;
-    ss << " (thread: " << getThreadID( ) << ")";
-
-    std::chrono::system_clock::time_point now = std::chrono::system_clock::now( );
-    int ms = std::chrono::duration_cast< std::chrono::milliseconds >( std::chrono::steady_clock::now( ).time_since_epoch( ) ).count( ) - sinceEpoch;
-    std::cout << strTag << ss.str( ) << ": " << ms << " ms" << std::endl;
-}
-
-
-//******************************************************************************
-//
-//  transformPacket
-//
-//******************************************************************************
-
-void transformPacket( const PacketData & oldPacket, PacketData & newPacket ) {
-    newPacket.used = oldPacket.used;
-
-    for ( int i = 0; i < oldPacket.used; i++ ) {
-        unsigned char c = static_cast< unsigned char >( oldPacket.buffer[ i ] );
-
-        if ( std::islower( c ) ) {
-            newPacket.buffer[ i ] = static_cast< char >( std::toupper( c ) );
-        } else {
-            newPacket.buffer[ i ] = c;
-        }
-    }
-
-    //std::default_random_engine generator;
-    //std::uniform_int_distribution< int > distribution( 100, 2000 );
-    //int nMS = distribution( generator );
-    int nMS = 1000 + rand( ) % 500;
-
-    std::cout << "sleep " << nMS << " ms (thread: " << getThreadID( ) << ")" << std::endl;
-
-    //std::this_thread::sleep_for( std::chrono::milliseconds( distribution( generator ) ) );
-    std::this_thread::sleep_for( std::chrono::milliseconds( nMS ) );
-
-    //printf( "here: (size: %d) '%s'\n", newPacket.used, newPacket.buffer );
-}
 
 
 //******************************************************************************
@@ -125,17 +38,13 @@ void processData( concurrentQueue< PacketData > & inputQueue,
     PacketData data;
 
     while ( true ) {
-
-        printTime( "pre-wait 1" );
         inputQueue.waitAndPop( data );
-        printTime( "post-wait 1" );
 
         PacketData newData( data.index );
-
         transformPacket( data, newData );
-
         outputQueue.push( newData );
-        //printf( "Received packet %d\n", newData.index );
+
+        std::cout << "received packet " << newData.index << std::endl;
     }
 }
 
@@ -153,10 +62,7 @@ void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > 
     int nPacketIndex = 0;
 
     while ( true ) {
-        printf( "waiting for packet %d...\n", nPacketIndex );
-        printTime( "pre-wait 2" );
         outputQueue.waitForIndexAndPop( nPacketIndex, data );
-        printTime( "post-wait 2" );
 
         nPacketIndex++;
 
@@ -177,7 +83,7 @@ void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > 
 
 int main( int argc, char * argv[ ] ) {
     if ( argc < 2 ) {
-        fprintf( stderr, "ERROR, no port provided\n" );
+        std::cerr << "usage:  " << argv[ 0 ] << " port" << std::endl;
         exit( 1 );
     }
 
@@ -197,7 +103,6 @@ int main( int argc, char * argv[ ] ) {
 		die( "failed to create socket" );
 	}
 
-	// zero out the structure
     bzero( &si_server, sizeof( si_server ) );
 
 	si_server.sin_family = AF_INET;
@@ -211,9 +116,9 @@ int main( int argc, char * argv[ ] ) {
 
     socklen_t si_len = sizeof( si_client );
 
+    // set up our data structures and worker threads
     printTime( "creating worker threads" );
 
-    // set up our data structures and worker threads
     concurrentQueue< PacketData > inputQueue;
     concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > outputQueue;
 
@@ -246,8 +151,8 @@ int main( int argc, char * argv[ ] ) {
 		}
 
         // print details of the client/peer and the data received
-        printf( "Received packet from %s:%d\n", inet_ntoa( si_client.sin_addr ),
-                ntohs( si_client.sin_port ) );
+        std::cout << "Received packet from " << inet_ntoa( si_client.sin_addr ) << ":" <<
+                     ntohs( si_client.sin_port ) << std::endl;
 
         data.used = nReceived;
 
@@ -259,5 +164,4 @@ int main( int argc, char * argv[ ] ) {
 	close( sockfd );
 	return 0;
 }
-
 

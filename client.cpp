@@ -4,27 +4,81 @@
 //
 //******************************************************************************
 
-#include <arpa/inet.h>
 #include <fstream>
-#include <stdio.h>
-#include <stdlib.h>
+#include <iostream>
 #include <string>
-#include <string.h>
-#include <sys/socket.h>
+#include <thread>
+
 #include <unistd.h>
 
+#include <arpa/inet.h>
+
+#include <sys/socket.h>
+
 #include "PacketData.h"
+#include "utils.h"
 
 
 //******************************************************************************
 //
-//  die
+//  globals
 //
 //******************************************************************************
 
-void die( const char * s ) {
-    perror( s );
-    exit( 1 );
+std::ofstream fileOutput;
+int sockfd;
+
+
+//******************************************************************************
+//
+//  handleSigInt
+//
+//  listener uses ctrl-c as a signal to clean up and shut down
+//
+//******************************************************************************
+
+void handleSigInt( int signal ) {
+    std::cout << std::endl << "Shutting down..." << std::endl;
+
+    fileOutput.close( );
+    close( sockfd );
+
+    exit( 0 );
+}
+
+
+//******************************************************************************
+//
+//  outputData
+//
+//******************************************************************************
+
+void outputData( int sockfd, const struct sockaddr_in & si_other, std::ofstream & fileOutput ) {
+    PacketData data;
+
+    int nPacketIndex = 0;
+
+    char buffer[ PACKET_DATA_SIZE ];
+
+    std::streamsize readSize;
+
+    socklen_t si_len = sizeof( si_other );
+
+    while ( true ) {
+        // clear the buffer by filling null, it might have previously received data
+        bzero( buffer, PACKET_DATA_SIZE );
+
+        std::cout << "receiving..." << std::endl;
+
+        // try to receive some data, this is a blocking call
+        if ( recvfrom( sockfd, buffer, readSize, 0, ( struct sockaddr * ) &si_other, &si_len ) == -1 ) {
+            die( "recvfrom( )" );
+        }
+
+        std::cout << "got it! (" << readSize << ")" << std::endl;
+
+        fileOutput.write( buffer, readSize );
+    }
 }
 
 
@@ -50,7 +104,7 @@ int main( int argc, char * argv[ ] ) {
     char buffer[ PACKET_DATA_SIZE ];
     char message[ PACKET_DATA_SIZE ];
 
-    int sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+    sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
 
     if ( sockfd == -1 ) {
         die( "socket" );
@@ -69,8 +123,15 @@ int main( int argc, char * argv[ ] ) {
     std::ofstream fileOutput( strFileName + ".out", std::ios::binary );
 
     if ( !fileInput.is_open( ) ) {
-        die( "ERROR opening file" );
+        die( "ERROR opening input file" );
     }
+
+    if ( !fileOutput.is_open( ) ) {
+        die( "ERROR opening output file" );
+    }
+
+    std::thread outputThread( outputData, sockfd, std::cref( si_other ), std::ref( fileOutput ) );
+    outputThread.detach( );
 
     fileInput.read( buffer, PACKET_DATA_SIZE );
 
@@ -83,29 +144,25 @@ int main( int argc, char * argv[ ] ) {
             readSize = fileInput.gcount( );
         }
 
+        std::cout << "sending..." << std::endl;
+
         // send the message
         if ( sendto( sockfd, buffer, readSize, 0, ( struct sockaddr * ) &si_other, si_len ) == -1 ) {
             die( "sendto( )" );
         }
 
-        // clear the buffer by filling null, it might have previously received data
-        bzero( buffer, PACKET_DATA_SIZE );
-
-        // try to receive some data, this is a blocking call
-        if ( recvfrom( sockfd, buffer, readSize, 0, ( struct sockaddr * ) &si_other, &si_len ) == -1 ) {
-            die( "recvfrom( )" );
-        }
-
+        // grab another chunk of data from the file
         fileInput.read( buffer, PACKET_DATA_SIZE );
-        fileOutput.write( buffer, readSize );
     }
 
-    fileInput.close( );
-    fileOutput.close( );
+    std::cout << "finished!" << std::endl;
 
-    close( sockfd );
+    fileInput.close( );
+
+    // let the listener thread finish, use ctrl-c to stop
+    while ( true ) {
+    }
 
     return 0;
 }
-
 
