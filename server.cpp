@@ -1,3 +1,84 @@
+/*
+	Simple udp server
+*/
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#define BUFLEN 512	// Max length of buffer
+
+void die( const char * s ) {
+	perror( s );
+	exit( 1 );
+}
+
+int main( int argc, char * argv[ ] ) {
+    if ( argc < 2 ) {
+        fprintf( stderr, "ERROR, no port provided\n" );
+        exit( 1 );
+    }
+
+    int nPort = atoi( argv[ 1 ] );    
+    
+	struct sockaddr_in si_server, si_client;
+	
+	socklen_t si_size = sizeof( si_client );
+    
+	char buf[ BUFLEN ];
+
+    // create a UDP socket
+    int sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+    
+	if ( sockfd == -1 ) {
+		die( "failed to create socket" );
+	}
+	
+	// zero out the structure
+	memset( ( char * ) &si_server, 0, sizeof( si_server ) );
+	
+	si_server.sin_family = AF_INET;
+	si_server.sin_port = htons( nPort );
+	si_server.sin_addr.s_addr = htonl( INADDR_ANY );
+	
+	// bind socket to port
+	if ( bind( sockfd, ( struct sockaddr * ) &si_server, sizeof( si_server ) ) == -1 ) {
+		die( "bind" );
+	}
+	
+	socklen_t si_len;
+	
+	// keep listening for data
+	while ( true ) {
+		printf( "Waiting for data..." );
+		fflush( stdout );
+		
+        int recv_len = recvfrom( sockfd, buf, BUFLEN, 0, ( struct sockaddr * ) &si_client, &si_len );
+        
+		//try to receive some data, this is a blocking call
+		if ( recv_len == -1 ) {
+			die( "recvfrom()" );
+		}
+		
+		// print details of the client/peer and the data received
+		printf( "Received packet from %s:%d\n", inet_ntoa( si_client.sin_addr ), ntohs( si_client.sin_port ) );
+		//printf( "Data: %s\n" , buf );
+		
+		//now reply the client with the same data
+		if ( sendto( sockfd, buf, recv_len, 0, ( struct sockaddr * ) &si_client, si_len ) == -1 ) {
+			die( "sendto()" );
+		}
+	}
+
+	close( sockfd );
+	return 0;
+}
+
+
+#if 0
+
 /* The port number is passed as an argument */
 #include <stdio.h>
 #include <stdlib.h>
@@ -105,3 +186,5 @@ int main( int argc, char * argv[ ] ) {
 
     return 0; 
 }
+
+#endif

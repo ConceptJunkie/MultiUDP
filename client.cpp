@@ -1,20 +1,85 @@
+/*
+ * Simple udp client
+ */
+
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <sys/types.h>
+#include <stdlib.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <string>
+#include <unistd.h>
 #include <fstream>
+#include <string>
 
+#define SERVER "127.0.0.1"
+#define BUFLEN 512	//Max length of buffer
+#define PORT 8888	//The port on which to send data
 
-void error( const char * msg ) {
-    perror( msg );
-    exit( 0 );
+void die( const char * s ) {
+    perror(s);
+    exit(1);
 }
 
+int main( int argc, char * argv[ ] ) {
+    if ( argc < 4 ) {
+        fprintf( stderr, "usage %s hostname port filename\n", argv[ 0 ] );
+        exit( 0 );
+    }  
+    
+    struct sockaddr_in si_other;
+    int s, i;
+    socklen_t slen=sizeof(si_other);
+    char buf[BUFLEN];
+    char message[BUFLEN];
+    
+    if ( (s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+    {
+        die("socket");
+    }
+    
+    memset((char *) &si_other, 0, sizeof(si_other));
+    si_other.sin_family = AF_INET;
+    si_other.sin_port = htons(PORT);
+    
+    if (inet_aton(SERVER , &si_other.sin_addr) == 0) 
+    {
+        fprintf(stderr, "inet_aton() failed\n");
+        exit(1);
+    }
+       
+    std::ifstream fin( argv[ 3 ] );
+    
+    if ( !fin.is_open( ) ) {
+        die( "ERROR opening file" );
+    }
+    
+    std::string line;
+    
+    while( getline( fin, line ) ) {
+        // send the message
+        if ( sendto( s, line.c_str( ), line.length( ) , 0 , ( struct sockaddr * ) &si_other, slen)==-1) {
+            die( "sendto()" );
+        }
+        
+        // receive a reply and print it
+        // clear the buffer by filling null, it might have previously received data
+        memset( buf,'\0', BUFLEN);
+        
+        //try to receive some data, this is a blocking call
+        if (recvfrom(s, buf, BUFLEN, 0, (struct sockaddr *) &si_other, &slen) == -1)
+        {
+            die("recvfrom()");
+        }
+        
+        printf( "message:  '%s'\n", buf );
+    }
+    
+    close(s);
+    return 0;
+}
+
+
+#if 0
 
 int main( int argc, char * argv[ ] ) {
     struct sockaddr_in serv_addr;
@@ -69,3 +134,5 @@ int main( int argc, char * argv[ ] ) {
     close( sockfd );
     return 0;
 }
+
+#endif
