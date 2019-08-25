@@ -1,19 +1,147 @@
-/*
-	Simple udp server
-*/
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+//******************************************************************************
+//
+//  MultiUDP server
+//
+//******************************************************************************
+
 #include <arpa/inet.h>
+#include <cctype>
+#include <chrono>
+#include <ctime>
+#include <iostream>
+#include <random>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <string>
+#include <thread>
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define BUFLEN 512	// Max length of buffer
+#include "ConcurrentQueue.h"
+#include "PacketData.h"
+
+#define THREADS     8
+
+
+//******************************************************************************
+//
+//  die
+//
+//******************************************************************************
 
 void die( const char * s ) {
 	perror( s );
 	exit( 1 );
 }
+
+
+//******************************************************************************
+//
+//  printTime
+//
+//******************************************************************************
+
+void printTime( const std::string & strTag ) {
+    std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+
+    std::time_t tt = std::chrono::system_clock::to_time_t( now );
+    std::cout << strTag << ": " << ctime( &tt ) << std::endl;
+}
+
+
+//******************************************************************************
+//
+//  transformPacket
+//
+//******************************************************************************
+
+void transformPacket( const PacketData & oldPacket, PacketData & newPacket ) {
+    newPacket.used = oldPacket.used;
+
+    for ( int i = 0; i < oldPacket.used; i++ ) {
+        unsigned char c = static_cast< unsigned char >( oldPacket.buffer[ i ] );
+
+        if ( std::islower( c ) ) {
+            newPacket.buffer[ i ] = static_cast< char >( std::toupper( c ) );
+        } else {
+            newPacket.buffer[ i ] = c;
+        }
+    }
+
+    //std::default_random_engine generator;
+    //std::uniform_int_distribution< int > distribution( 100, 2000 );
+    //int nMS = distribution( generator );
+    int nMS = rand( ) % 2000;
+
+    std::cout << "sleep " << nMS << " ms" << std::endl;
+
+    //std::this_thread::sleep_for( std::chrono::milliseconds( distribution( generator ) ) );
+    std::this_thread::sleep_for( std::chrono::milliseconds( nMS ) );
+
+    //printf( "here: (size: %d) '%s'\n", newPacket.used, newPacket.buffer );
+}
+
+
+//******************************************************************************
+//
+//  processData
+//
+//******************************************************************************
+
+void processData( concurrentQueue< PacketData > & inputQueue,
+                  concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > & outputQueue ) {
+    PacketData data;
+
+    while ( true ) {
+        printTime( "pre-wait 1" );
+        inputQueue.waitAndPop( data );
+        printTime( "post-wait 1" );
+
+        PacketData newData( data.index );
+
+        transformPacket( data, newData );
+
+        outputQueue.push( newData );
+        //printf( "Received packet %d\n", newData.index );
+    }
+}
+
+
+//******************************************************************************
+//
+//  outputData
+//
+//******************************************************************************
+
+void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > & outputQueue,
+                 int sockfd, const struct sockaddr_in & si_client ) {
+    PacketData data;
+
+    int nPacketIndex = 0;
+
+    while ( true ) {
+        printf( "waiting for packet %d...\n", nPacketIndex );
+        printTime( "pre-wait 2" );
+        outputQueue.waitForIndexAndPop( nPacketIndex, data );
+        printTime( "post-wait 2" );
+
+        nPacketIndex++;
+
+        // now reply the client with the same data
+        if ( sendto( sockfd, data.buffer, data.used, 0, ( struct sockaddr * )
+                     &si_client, sizeof( si_client ) ) == -1 ) {
+            die( "sendto( )" );
+        }
+    }
+}
+
+
+//******************************************************************************
+//
+//  main
+//
+//******************************************************************************
 
 int main( int argc, char * argv[ ] ) {
     if ( argc < 2 ) {
@@ -21,55 +149,79 @@ int main( int argc, char * argv[ ] ) {
         exit( 1 );
     }
 
-    int nPort = atoi( argv[ 1 ] );    
-    
-	struct sockaddr_in si_server, si_client;
-	
+    int nPort = std::stoi( argv[ 1 ] );
+
+    struct sockaddr_in si_server,
+                       si_client;
+
 	socklen_t si_size = sizeof( si_client );
-    
-	char buf[ BUFLEN ];
+
+    PacketData data;
 
     // create a UDP socket
     int sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
-    
+
 	if ( sockfd == -1 ) {
 		die( "failed to create socket" );
 	}
-	
+
 	// zero out the structure
-	memset( ( char * ) &si_server, 0, sizeof( si_server ) );
-	
+    bzero( &si_server, sizeof( si_server ) );
+
 	si_server.sin_family = AF_INET;
 	si_server.sin_port = htons( nPort );
 	si_server.sin_addr.s_addr = htonl( INADDR_ANY );
-	
+
 	// bind socket to port
 	if ( bind( sockfd, ( struct sockaddr * ) &si_server, sizeof( si_server ) ) == -1 ) {
 		die( "bind" );
 	}
-	
-	socklen_t si_len;
-	
+
+    socklen_t si_len = sizeof( si_client );
+
+    concurrentQueue< PacketData > inputQueue;
+    concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > outputQueue;
+
 	// keep listening for data
+
+    int nPacketIndex = 0;
+
+    std::vector< std::thread > threads( THREADS - 2 );
+
+    for ( int i = 0; i < THREADS - 2; i++ ) {
+        threads[ i ] = std::thread( processData, std::ref( inputQueue ), std::ref( outputQueue ) );
+        threads[ i ].detach( );
+    }
+
+    std::thread outputThread( outputData, std::ref( outputQueue ), sockfd, std::cref( si_client ) );
+    outputThread.detach( );
+
+    printf( "Waiting for data...\n" );
+
 	while ( true ) {
-		printf( "Waiting for data..." );
 		fflush( stdout );
-		
-        int recv_len = recvfrom( sockfd, buf, BUFLEN, 0, ( struct sockaddr * ) &si_client, &si_len );
-        
-		//try to receive some data, this is a blocking call
-		if ( recv_len == -1 ) {
-			die( "recvfrom()" );
+
+        PacketData data( nPacketIndex++ );
+
+        // try to receive some data, this is a blocking call
+        int nReceived = recvfrom( sockfd, data.buffer, PACKET_DATA_SIZE, 0,
+                                  ( struct sockaddr * ) &si_client, &si_len );
+
+        if ( nReceived == -1 ) {
+            die( "recvfrom( )" );
 		}
-		
-		// print details of the client/peer and the data received
-		printf( "Received packet from %s:%d\n", inet_ntoa( si_client.sin_addr ), ntohs( si_client.sin_port ) );
-		//printf( "Data: %s\n" , buf );
-		
-		//now reply the client with the same data
-		if ( sendto( sockfd, buf, recv_len, 0, ( struct sockaddr * ) &si_client, si_len ) == -1 ) {
-			die( "sendto()" );
-		}
+
+        // print details of the client/peer and the data received
+        printf( "Received packet from %s:%d\n", inet_ntoa( si_client.sin_addr ),
+                ntohs( si_client.sin_port ) );
+
+        data.used = nReceived;
+
+        // push the received packet into the queue to be processed
+
+        printTime( "pre-push" );
+        inputQueue.push( data );
+        printTime( "post-push" );
 	}
 
 	close( sockfd );
@@ -77,114 +229,3 @@ int main( int argc, char * argv[ ] ) {
 }
 
 
-#if 0
-
-/* The port number is passed as an argument */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h> 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-void error(const char *msg)
-{
-    perror(msg);
-    exit(1);
-}
-
-int main( int argc, char * argv[ ] ) {
-     char buffer[ 256 ];
-     struct sockaddr_in serv_addr, cli_addr;
-     int n;
-
-     if ( argc < 2 ) {
-         fprintf( stderr, "ERROR, no port provided\n" );
-         exit( 1 );
-     }
-
-     // create a socket
-     // socket(int domain, int type, int protocol)
-     int sockfd = socket( AF_INET, SOCK_STREAM, 0 );
-
-     if ( sockfd < 0 ) {
-        error( "ERROR opening socket" );
-     }
-
-     // clear address structure
-     bzero( ( char * ) &serv_addr, sizeof( serv_addr ) );
-
-     int nPort = atoi( argv[ 1 ] );
-
-     // setup the host_addr structure for use in bind call
-     // server byte order
-     serv_addr.sin_family = AF_INET;
-
-     // automatically be filled with current host's IP address
-     serv_addr.sin_addr.s_addr = INADDR_ANY;
-
-     // convert short integer value for port must be converted into network byte order
-     serv_addr.sin_port = htons( nPort );
-
-     // bind(int fd, struct sockaddr *local_addr, socklen_t addr_length)
-     // bind() passes file descriptor, the address structure,
-     // and the length of the address structure
-     // This bind() call will bind  the socket to the current IP address on port, portno
-     if ( bind( sockfd, ( struct sockaddr * ) &serv_addr, sizeof( serv_addr ) ) < 0 ) {
-         error( "ERROR on binding" );
-     }
-
-     printf( "Hello1\n" );
-     
-     // This listen() call tells the socket to listen to the incoming connections.
-     // The listen() function places all incoming connection into a backlog queue
-     // until accept() call accepts the connection.
-     // Here, we set the maximum size for the backlog queue to 5.
-     listen( sockfd, 5 );
-     
-     printf( "Hello2\n" );     
-
-     // The accept() call actually accepts an incoming connection
-     socklen_t uClientLength = sizeof( cli_addr );
-
-     // This accept() function will write the connecting client's address info
-     // into the the address structure and the size of that structure is clilen.
-     // The accept() returns a new socket file descriptor for the accepted connection.
-     // So, the original socket file descriptor can continue to be used
-     // for accepting new connections while the new socker file descriptor is used for
-     // communicating with the connected client.
-     int newsockfd = accept( sockfd, ( struct sockaddr * ) &cli_addr, &uClientLength );
-
-     printf( "Hello3\n" );
-     
-     if ( newsockfd < 0 ) {
-          error( "ERROR on accept" ); 
-    }
-
-    printf( "server: got connection from %s port %d\n",
-            inet_ntoa( cli_addr.sin_addr ), ntohs( cli_addr.sin_port ) );
-
-    // This send() function sends the 13 bytes of the string to the new socket
-    send( newsockfd, "Hello, world!\n", 13, 0 );
-
-    while ( true ) {
-        bzero( buffer, 256 );
-        
-        int nBytesRead = read( newsockfd, buffer, 255 );
-
-        if ( nBytesRead < 0 ) {
-            error( "ERROR reading from socket" );
-        }
-
-        printf( "message: %s\n", buffer );
-    }
-
-    close( newsockfd );
-    close( sockfd );
-
-    return 0; 
-}
-
-#endif
