@@ -72,9 +72,12 @@ int getThreadID( ) {
 //******************************************************************************
 
 void printTime( const std::string & strTag ) {
+    std::stringstream ss;
+    ss << " (thread: " << getThreadID( ) << ")";
+
     std::chrono::system_clock::time_point now = std::chrono::system_clock::now( );
     int ms = std::chrono::duration_cast< std::chrono::milliseconds >( std::chrono::steady_clock::now( ).time_since_epoch( ) ).count( ) - sinceEpoch;
-    std::cout << strTag << ": " << ms << " ms" << std::endl;
+    std::cout << strTag << ss.str( ) << ": " << ms << " ms" << std::endl;
 }
 
 
@@ -100,7 +103,7 @@ void transformPacket( const PacketData & oldPacket, PacketData & newPacket ) {
     //std::default_random_engine generator;
     //std::uniform_int_distribution< int > distribution( 100, 2000 );
     //int nMS = distribution( generator );
-    int nMS = rand( ) % 500;
+    int nMS = 1000 + rand( ) % 500;
 
     std::cout << "sleep " << nMS << " ms (thread: " << getThreadID( ) << ")" << std::endl;
 
@@ -122,12 +125,10 @@ void processData( concurrentQueue< PacketData > & inputQueue,
     PacketData data;
 
     while ( true ) {
-        std::stringstream ss;
-        ss << "(thread: " << getThreadID( ) << ")";
 
-        printTime( "pre-wait 1 " + ss.str( ) );
+        printTime( "pre-wait 1" );
         inputQueue.waitAndPop( data );
-        printTime( "post-wait 1 " + ss.str( ) );
+        printTime( "post-wait 1" );
 
         PacketData newData( data.index );
 
@@ -210,10 +211,11 @@ int main( int argc, char * argv[ ] ) {
 
     socklen_t si_len = sizeof( si_client );
 
+    printTime( "creating worker threads" );
+
+    // set up our data structures and worker threads
     concurrentQueue< PacketData > inputQueue;
     concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > outputQueue;
-
-	// keep listening for data
 
     int nPacketIndex = 0;
 
@@ -227,7 +229,8 @@ int main( int argc, char * argv[ ] ) {
     std::thread outputThread( outputData, std::ref( outputQueue ), sockfd, std::cref( si_client ) );
     outputThread.detach( );
 
-    printf( "Waiting for data...\n" );
+    // keep listening for data
+    printTime( "start waiting for data" );
 
 	while ( true ) {
 		fflush( stdout );
@@ -249,10 +252,8 @@ int main( int argc, char * argv[ ] ) {
         data.used = nReceived;
 
         // push the received packet into the queue to be processed
-
-        //printTime( "pre-push" );
+        printTime( "pushing packet " + std::to_string( nPacketIndex - 1 ) + " to input queue" );
         inputQueue.push( data );
-        //printTime( "post-push" );
 	}
 
 	close( sockfd );
