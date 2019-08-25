@@ -111,12 +111,11 @@ class concurrentPriorityQueue {
             std::unique_lock< std::mutex > lock( m_mutex );
 
             while ( m_queue.empty( ) || ( m_queue.top( ).index != nIndex ) ) {
-                if ( m_queue.empty( ) ) {
-                    printf( "---> waiting for %d, but queue is empty\n", nIndex );
-                } else {
-                    printf( "---> waiting for %d, but top index is %d\n", nIndex, m_queue.top( ).index );
-                }
-
+                //if ( m_queue.empty( ) ) {
+                //    printf( "---> waiting for %d, but queue is empty\n", nIndex );
+                //} else {
+                //    printf( "---> waiting for %d, but top index is %d\n", nIndex, m_queue.top( ).index );
+                //}
                 m_condition.wait( lock );
             }
 

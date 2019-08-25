@@ -9,7 +9,7 @@
 
 #include <string.h>
 
-constexpr int PACKET_DATA_SIZE = 1024;    // Max length of buffer
+constexpr int PACKET_DATA_SIZE = 4096;
 
 
 //******************************************************************************

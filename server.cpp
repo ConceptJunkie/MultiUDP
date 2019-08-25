@@ -44,8 +44,6 @@ void processData( concurrentQueue< PacketData > & inputQueue,
         ss << "process thread received packet " << data.index;
         printTime( ss.str( ) );
 
-        std::cout << "process thread received packet " << data.index << std::endl;
-
         PacketData newData( data.index );
         transformPacket( data, newData );
         outputQueue.push( newData );
@@ -89,9 +87,11 @@ void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexGreaterThan
     char buffer[ PACKET_DATA_SIZE ];
 
     while ( true ) {
-        printTime( "output thread is waiting for a packet" );
+        std::stringstream ss;
+        ss << "output thread is waiting for packet " << data.index;
+        printTime( ss.str( ) );
+
         outputQueue.waitForIndexAndPop( nPacketIndex, data );
-        printTime( "output thread got a packet off the queue" );
 
         nPacketIndex++;
 
@@ -100,8 +100,6 @@ void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexGreaterThan
                      ( struct sockaddr * ) &si_other, sizeof( si_other ) ) == -1 ) {
             die( "sendto( )" );
         }
-
-        printTime( "output thread sent a packet to the listener" );
     }
 }
 
