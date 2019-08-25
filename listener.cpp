@@ -61,7 +61,8 @@ int main( int argc, char * argv[ ] ) {
     int port = std::stoi( argv[ 1 ] );      // port
     std::string strFileName = argv[ 2 ];    // output file name
 
-    struct sockaddr_in si_other;
+    struct sockaddr_in si_listener,
+                       si_sender;
 
     // create a UDP socket
     sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
@@ -70,18 +71,18 @@ int main( int argc, char * argv[ ] ) {
         die( "failed to create socket" );
     }
 
-    bzero( &si_other, sizeof( si_other ) );
+    bzero( &si_listener, sizeof( si_listener ) );
 
-    si_other.sin_family = AF_INET;
-    si_other.sin_port = htons( port );
-    si_other.sin_addr.s_addr = htonl( INADDR_ANY );
+    si_listener.sin_family = AF_INET;
+    si_listener.sin_port = htons( port );
+    si_listener.sin_addr.s_addr = htonl( INADDR_ANY );
 
     // bind socket to port
-    if ( bind( sockfd, ( struct sockaddr * ) &si_other, sizeof( si_other ) ) == -1 ) {
+    if ( bind( sockfd, ( struct sockaddr * ) &si_listener, sizeof( si_listener ) ) == -1 ) {
         die( "bind" );
     }
 
-    socklen_t si_len = sizeof( si_other );
+    socklen_t si_len = sizeof( si_sender );
 
     // open the output file to save what we receive
     fileOutput.open( strFileName, std::ios::binary );
@@ -108,7 +109,7 @@ int main( int argc, char * argv[ ] ) {
         // this is a blocking call
         ssize_t received =
             recvfrom( sockfd, buffer, PACKET_DATA_SIZE, MSG_WAITALL,
-                      ( struct sockaddr * ) &si_other, &si_len );
+                      ( struct sockaddr * ) &si_sender, &si_len );
 
         if ( received == -1 ) {
             die( "recvfrom( )" );
