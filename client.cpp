@@ -13,7 +13,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define BUFFER_LENGTH 512    //Max length of buffer
+#include "PacketData.h"
 
 
 //******************************************************************************
@@ -47,8 +47,8 @@ int main( int argc, char * argv[ ] ) {
     struct sockaddr_in si_other;
     socklen_t si_len = sizeof( si_other );
 
-    char buffer[ BUFFER_LENGTH ];
-    char message[ BUFFER_LENGTH ];
+    char buffer[ PACKET_DATA_SIZE ];
+    char message[ PACKET_DATA_SIZE ];
 
     int sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
 
@@ -65,30 +65,43 @@ int main( int argc, char * argv[ ] ) {
         die( "inet_aton( ) failed\n" );
     }
 
-    std::ifstream fileInput( strFileName );
+    std::ifstream fileInput( strFileName, std::ios::binary );
+    std::ofstream fileOutput( strFileName + ".out", std::ios::binary );
 
     if ( !fileInput.is_open( ) ) {
         die( "ERROR opening file" );
     }
 
-    std::string line;
+    fileInput.read( buffer, PACKET_DATA_SIZE );
 
-    while( getline( fileInput, line ) ) {
+    while( fileInput || fileInput.gcount( ) ) {
+        std::streamsize readSize;
+
+        if ( fileInput ) {
+            readSize = PACKET_DATA_SIZE;
+        } else {
+            readSize = fileInput.gcount( );
+        }
+
         // send the message
-        if ( sendto( sockfd, line.c_str( ), line.length( ) , 0 , ( struct sockaddr * ) &si_other, si_len ) == -1 ) {
+        if ( sendto( sockfd, buffer, readSize, 0, ( struct sockaddr * ) &si_other, si_len ) == -1 ) {
             die( "sendto( )" );
         }
 
         // clear the buffer by filling null, it might have previously received data
-        bzero( buffer, BUFFER_LENGTH );
+        bzero( buffer, PACKET_DATA_SIZE );
 
         // try to receive some data, this is a blocking call
-        if ( recvfrom( sockfd, buffer, BUFFER_LENGTH, 0, ( struct sockaddr * ) &si_other, &si_len ) == -1 ) {
+        if ( recvfrom( sockfd, buffer, readSize, 0, ( struct sockaddr * ) &si_other, &si_len ) == -1 ) {
             die( "recvfrom( )" );
         }
 
-        printf( "message:  '%s'\n", buffer );
+        fileInput.read( buffer, PACKET_DATA_SIZE );
+        fileOutput.write( buffer, readSize );
     }
+
+    fileInput.close( );
+    fileOutput.close( );
 
     close( sockfd );
 

@@ -4,24 +4,30 @@
 //
 //******************************************************************************
 
-#include <arpa/inet.h>
 #include <cctype>
 #include <chrono>
 #include <ctime>
 #include <iostream>
+#include <map>
 #include <random>
+#include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <string>
 #include <thread>
-#include <sys/socket.h>
 #include <unistd.h>
+
+#include <arpa/inet.h>
+
+#include <sys/socket.h>
 
 #include "ConcurrentQueue.h"
 #include "PacketData.h"
 
 #define THREADS     8
+
+long long sinceEpoch = std::chrono::duration_cast< std::chrono::milliseconds >( std::chrono::steady_clock::now( ).time_since_epoch( ) ).count( );
 
 
 //******************************************************************************
@@ -31,8 +37,31 @@
 //******************************************************************************
 
 void die( const char * s ) {
-	perror( s );
-	exit( 1 );
+    perror( s );
+    exit( 1 );
+}
+
+
+//******************************************************************************
+//
+//  getThreadID
+//
+//******************************************************************************
+
+int getThreadID( ) {
+    static int threads = 0;
+    static std::map< std::thread::id, int > threadMap;
+
+    std::thread::id threadID = std::this_thread::get_id( );
+
+    auto it = threadMap.find( threadID );
+
+    if ( it == threadMap.end( ) ) {
+        threadMap.emplace( threadID, threads++ );
+        return threads - 1;
+    } else {
+        return it->second;
+    }
 }
 
 
@@ -43,10 +72,9 @@ void die( const char * s ) {
 //******************************************************************************
 
 void printTime( const std::string & strTag ) {
-    std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
-
-    std::time_t tt = std::chrono::system_clock::to_time_t( now );
-    std::cout << strTag << ": " << ctime( &tt ) << std::endl;
+    std::chrono::system_clock::time_point now = std::chrono::system_clock::now( );
+    int ms = std::chrono::duration_cast< std::chrono::milliseconds >( std::chrono::steady_clock::now( ).time_since_epoch( ) ).count( ) - sinceEpoch;
+    std::cout << strTag << ": " << ms << " ms" << std::endl;
 }
 
 
@@ -72,9 +100,9 @@ void transformPacket( const PacketData & oldPacket, PacketData & newPacket ) {
     //std::default_random_engine generator;
     //std::uniform_int_distribution< int > distribution( 100, 2000 );
     //int nMS = distribution( generator );
-    int nMS = rand( ) % 2000;
+    int nMS = rand( ) % 500;
 
-    std::cout << "sleep " << nMS << " ms" << std::endl;
+    std::cout << "sleep " << nMS << " ms (thread: " << getThreadID( ) << ")" << std::endl;
 
     //std::this_thread::sleep_for( std::chrono::milliseconds( distribution( generator ) ) );
     std::this_thread::sleep_for( std::chrono::milliseconds( nMS ) );
@@ -94,9 +122,12 @@ void processData( concurrentQueue< PacketData > & inputQueue,
     PacketData data;
 
     while ( true ) {
-        printTime( "pre-wait 1" );
+        std::stringstream ss;
+        ss << "(thread: " << getThreadID( ) << ")";
+
+        printTime( "pre-wait 1 " + ss.str( ) );
         inputQueue.waitAndPop( data );
-        printTime( "post-wait 1" );
+        printTime( "post-wait 1 " + ss.str( ) );
 
         PacketData newData( data.index );
 
@@ -219,9 +250,9 @@ int main( int argc, char * argv[ ] ) {
 
         // push the received packet into the queue to be processed
 
-        printTime( "pre-push" );
+        //printTime( "pre-push" );
         inputQueue.push( data );
-        printTime( "post-push" );
+        //printTime( "post-push" );
 	}
 
 	close( sockfd );
