@@ -35,9 +35,9 @@ struct PacketData {
 };
 
 
-struct PacketDataIndexLessThan {
+struct PacketDataIndexGreaterThan {
     bool operator( ) ( const PacketData & lhs, const PacketData & rhs ) const {
-        return lhs.index < rhs.index;
+        return lhs.index > rhs.index;
     }
 };
 

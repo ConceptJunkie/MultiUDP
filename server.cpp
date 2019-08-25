@@ -34,17 +34,25 @@
 //******************************************************************************
 
 void processData( concurrentQueue< PacketData > & inputQueue,
-                  concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > & outputQueue ) {
+                  concurrentPriorityQueue< PacketData, PacketDataIndexGreaterThan > & outputQueue ) {
     PacketData data;
 
     while ( true ) {
         inputQueue.waitAndPop( data );
 
+        std::stringstream ss;
+        ss << "process thread received packet " << data.index;
+        printTime( ss.str( ) );
+
+        std::cout << "process thread received packet " << data.index << std::endl;
+
         PacketData newData( data.index );
         transformPacket( data, newData );
         outputQueue.push( newData );
 
-        std::cout << "received packet " << newData.index << std::endl;
+        std::stringstream ss2;
+        ss2 << "process thread pushing packet " << data.index << " on the output queue";
+        printTime( ss2.str( ) );
     }
 }
 
@@ -55,22 +63,50 @@ void processData( concurrentQueue< PacketData > & inputQueue,
 //
 //******************************************************************************
 
-void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > & outputQueue,
-                 int sockfd, const struct sockaddr_in & si_client ) {
+void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexGreaterThan > & outputQueue,
+                 int port ) {
+    struct sockaddr_in si_other;
+
+    int sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+
+    if ( sockfd == -1 ) {
+        die( "socket" );
+    }
+
+    printf( "\n------------------> port %d\n", port );
+
+    bzero( &si_other, sizeof( si_other ) );
+
+    si_other.sin_family = AF_INET;
+    si_other.sin_port = htons( port );
+
+    std::string strHostName = "127.0.0.1";
+
+    if ( inet_aton( strHostName.c_str( ), &si_other.sin_addr ) == 0 ) {
+        die( "inet_aton( ) failed\n" );
+    }
+
     PacketData data;
 
     int nPacketIndex = 0;
 
+    char buffer[ PACKET_DATA_SIZE ];
+
     while ( true ) {
+        printTime( "output thread is waiting for a packet" );
+
         outputQueue.waitForIndexAndPop( nPacketIndex, data );
+        printTime( "output thread got a packet off the queue" );
 
         nPacketIndex++;
 
-        // now reply the client with the same data
-        if ( sendto( sockfd, data.buffer, data.used, 0, ( struct sockaddr * )
-                     &si_client, sizeof( si_client ) ) == -1 ) {
+        // now send the data to the listener
+        if ( sendto( sockfd, data.buffer, data.used, 0,
+                     ( struct sockaddr * ) &si_other, sizeof( si_other ) ) == -1 ) {
             die( "sendto( )" );
         }
+
+        printTime( "output thread sent a packet to the listener" );
     }
 }
 
@@ -82,17 +118,16 @@ void outputData( concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > 
 //******************************************************************************
 
 int main( int argc, char * argv[ ] ) {
-    if ( argc < 2 ) {
-        std::cerr << "usage:  " << argv[ 0 ] << " port" << std::endl;
+    if ( argc < 3 ) {
+        std::cerr << "usage:  " << argv[ 0 ] << " port_in port_out" << std::endl;
         exit( 1 );
     }
 
-    int nPort = std::stoi( argv[ 1 ] );
+    int portIn = std::stoi( argv[ 1 ] );
+    int portOut = std::stoi( argv[ 2 ] );
 
     struct sockaddr_in si_server,
                        si_client;
-
-	socklen_t si_size = sizeof( si_client );
 
     PacketData data;
 
@@ -106,7 +141,7 @@ int main( int argc, char * argv[ ] ) {
     bzero( &si_server, sizeof( si_server ) );
 
 	si_server.sin_family = AF_INET;
-	si_server.sin_port = htons( nPort );
+    si_server.sin_port = htons( portIn );
 	si_server.sin_addr.s_addr = htonl( INADDR_ANY );
 
 	// bind socket to port
@@ -120,7 +155,7 @@ int main( int argc, char * argv[ ] ) {
     printTime( "creating worker threads" );
 
     concurrentQueue< PacketData > inputQueue;
-    concurrentPriorityQueue< PacketData, PacketDataIndexLessThan > outputQueue;
+    concurrentPriorityQueue< PacketData, PacketDataIndexGreaterThan > outputQueue;
 
     int nPacketIndex = 0;
 
@@ -131,15 +166,13 @@ int main( int argc, char * argv[ ] ) {
         threads[ i ].detach( );
     }
 
-    std::thread outputThread( outputData, std::ref( outputQueue ), sockfd, std::cref( si_client ) );
+    std::thread outputThread( outputData, std::ref( outputQueue ), portOut );
     outputThread.detach( );
 
     // keep listening for data
     printTime( "start waiting for data" );
 
 	while ( true ) {
-		fflush( stdout );
-
         PacketData data( nPacketIndex++ );
 
         // try to receive some data, this is a blocking call
@@ -151,16 +184,17 @@ int main( int argc, char * argv[ ] ) {
 		}
 
         // print details of the client/peer and the data received
-        std::cout << "Received packet from " << inet_ntoa( si_client.sin_addr ) << ":" <<
+        std::cout << "main thread received packet from " << inet_ntoa( si_client.sin_addr ) << ":" <<
                      ntohs( si_client.sin_port ) << std::endl;
 
         data.used = nReceived;
 
         // push the received packet into the queue to be processed
-        printTime( "pushing packet " + std::to_string( nPacketIndex - 1 ) + " to input queue" );
+        printTime( "main thread pushing packet " + std::to_string( nPacketIndex - 1 ) + " to input queue" );
         inputQueue.push( data );
 	}
 
+    // we won't really get here
 	close( sockfd );
 	return 0;
 }

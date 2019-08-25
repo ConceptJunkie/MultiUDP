@@ -9,6 +9,8 @@
 #ifndef __ConcurrentQueue_h__
 #define __ConcurrentQueue_h__
 
+#include <stdio.h>
+
 #include <condition_variable>
 #include <mutex>
 #include <queue>
@@ -105,11 +107,16 @@ class concurrentPriorityQueue {
         // We are waiting for a specific index to show up, because we want to
         // output the packets in order, so we watch the index of the top item
         // in the priority queue.
-
         const Data & waitForIndexAndPop( int nIndex, Data & value ) {
             std::unique_lock< std::mutex > lock( m_mutex );
 
             while ( m_queue.empty( ) || ( m_queue.top( ).index != nIndex ) ) {
+                if ( m_queue.empty( ) ) {
+                    printf( "---> waiting for %d, but queue is empty\n", nIndex );
+                } else {
+                    printf( "---> waiting for %d, but top index is %d\n", nIndex, m_queue.top( ).index );
+                }
+
                 m_condition.wait( lock );
             }
 

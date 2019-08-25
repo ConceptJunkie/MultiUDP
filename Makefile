@@ -1,20 +1,26 @@
-all : client server
+all : sender listener server
 
-client : client.o utils.o
-	g++ client.o utils.o -o client -lpthread
+sender : sender.o utils.o
+	g++ sender.o utils.o -o sender
+
+listener : listener.o utils.o
+	g++ listener.o utils.o -o listener
 
 server : server.o utils.o
 	g++ server.o utils.o -o server -lpthread
 
+sender.o: sender.cpp PacketData.h utils.h
+	g++ -c sender.cpp
+
+listener.o: listener.cpp PacketData.h utils.h
+	g++ -c listener.cpp
+
 server.o : server.cpp ConcurrentQueue.h PacketData.h
 	g++ -c server.cpp
-
-client.o: client.cpp PacketData.h
-	g++ -c client.cpp
 
 utils.o : utils.cpp
 	g++ -c utils.cpp
 
 clean :
-	rm client server *.o
+	rm sender listener server *.o
 
