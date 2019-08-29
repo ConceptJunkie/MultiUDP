@@ -24,8 +24,8 @@
 
 class TemplateTypeBase {
 	public:
-		explicit TemplateTypeBase( int nID ) {
-			m_nID = nID;
+		explicit TemplateTypeBase( int nID ) :
+			m_nID( nID ) {
 		}
 
 		int getID( ) const {
@@ -46,6 +46,38 @@ class TemplateTypeBase {
 
 	private:
 		int m_nID;
+};
+
+
+//******************************************************************************
+//
+//  BiggerType
+//
+//******************************************************************************
+
+constexpr int BiggerTypeSize = 1000;
+
+class BiggerType : public TemplateTypeBase {
+	public:
+		explicit BiggerType( int nID ) : TemplateTypeBase( nID ) {
+			for ( int i = 0; i < BiggerTypeSize; i++ ) {
+				m_buffer[ i ] = i * i + getID( );
+			}
+		}
+
+		virtual bool isValid( ) const {
+			for ( int i = 0; i < BiggerTypeSize; i++ ) {
+				if ( m_buffer[ i ] != i * i + getID( ) ) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+	private:
+		int m_nID;
+		int m_buffer[ BiggerTypeSize ];
 };
 
 
@@ -175,6 +207,12 @@ bool testPopping( int nThreads, int nItems ) {
 }
 
 
+//******************************************************************************
+//
+//  main
+//
+//******************************************************************************
+
 int main( int argc, char * argv[ ] ) {
 	// step 1, test inserting
 	std::cout << "Test 1 " << ( testInserting< TemplateTypeBase >( 1, 100 ) ? "is successful" : "failed" ) << std::endl;
@@ -184,6 +222,7 @@ int main( int argc, char * argv[ ] ) {
 	std::cout << "Test 5 " << ( testInserting< TemplateTypeBase >( 1000, 10000 ) ? "is successful" : "failed" ) << std::endl;
 	std::cout << "Test 6 " << ( testInserting< TemplateTypeBase >( 10, 1000000 ) ? "is successful" : "failed" ) << std::endl;
 
+	// step 1, test popping
 	std::cout << "Test 7 " << ( testPopping< TemplateTypeBase >( 1, 100 ) ? "is successful" : "failed" ) << std::endl;
 	std::cout << "Test 8 " << ( testPopping< TemplateTypeBase >( 2, 1000 ) ? "is successful" : "failed" ) << std::endl;
 	std::cout << "Test 9 " << ( testPopping< TemplateTypeBase >( 10, 10000 ) ? "is successful" : "failed" ) << std::endl;
