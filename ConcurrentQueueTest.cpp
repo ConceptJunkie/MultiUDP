@@ -18,13 +18,47 @@
 
 //******************************************************************************
 //
+//  TemplateTypeBase
+//
+//******************************************************************************
+
+class TemplateTypeBase {
+	public:
+		explicit TemplateTypeBase( int nID ) {
+			m_nID = nID;
+		}
+
+		int getID( ) const {
+			return m_nID;
+		}
+
+		bool operator <( const TemplateTypeBase & other ) const {
+			return getID( ) < other.getID( );
+		}
+
+		bool operator >( const TemplateTypeBase & other ) const {
+			return getID( ) > other.getID( );
+		}
+
+		virtual bool isValid( ) const {
+			return true;
+		}
+
+	private:
+		int m_nID;
+};
+
+
+//******************************************************************************
+//
 //  insertData
 //
 //******************************************************************************
 
+template< typename T >
 void insertData( int nPrefix, int nItemsPerThread, concurrentQueue< int > & testQueue ) {
 	for ( int i = 0; i < nItemsPerThread; i++ ) {
-        testQueue.push( nPrefix * nItemsPerThread + i );
+        testQueue.push( T( nPrefix * nItemsPerThread + i ) );
     }
 }
 
@@ -35,6 +69,7 @@ void insertData( int nPrefix, int nItemsPerThread, concurrentQueue< int > & test
 //
 //******************************************************************************
 
+template< typename T >
 bool testInserting( int nThreads, int nItemsPerThread ) {
 	bool bSuccess = true;
 
@@ -43,16 +78,16 @@ bool testInserting( int nThreads, int nItemsPerThread ) {
     std::vector< std::thread > threads( nThreads );
 
     for ( int i = 0; i < nThreads; i++ ) {
-        threads[ i ] = std::thread( insertData, i, nItemsPerThread, std::ref( testQueue ) );
+        threads[ i ] = std::thread( insertData< int >, i, nItemsPerThread, std::ref( testQueue ) );
         threads[ i ].join( );
     }
 
-	std::vector< int > items;
+	std::vector< T > items;
 
 	int nItem;
 
 	while ( testQueue.tryPop( nItem ) ) {
-		items.push_back( nItem );
+		items.push_back( T( nItem ) );
 	}
 
 	std::sort( items.begin( ), items.end( ) );
@@ -64,7 +99,7 @@ bool testInserting( int nThreads, int nItemsPerThread ) {
 	}
 
     for ( int i = 0; i < nThreads * nItemsPerThread; i++ ) {
-		if ( items[ i ] != i ) {
+		if ( items[ i ].getID( ) != i ) {
 			std::cout << "test2:  Somehow, we don't have the items we inserted!" << std::endl;
 			bSuccess = false;
 			break;
@@ -81,11 +116,12 @@ bool testInserting( int nThreads, int nItemsPerThread ) {
 //
 //******************************************************************************
 
-void popData( concurrentQueue< int > & testQueue, std::vector< int > & items ) {
+template< typename T >
+void popData( concurrentQueue< int > & testQueue, std::vector< T > & items ) {
 	int nItem;
 
 	while ( testQueue.tryPop( nItem ) ) {
-		items.push_back( nItem );
+		items.push_back( T( nItem ) );
     }
 }
 
@@ -96,6 +132,7 @@ void popData( concurrentQueue< int > & testQueue, std::vector< int > & items ) {
 //
 //******************************************************************************
 
+template< typename T >
 bool testPopping( int nThreads, int nItems ) {
 	bool bSuccess = true;
 
@@ -106,14 +143,14 @@ bool testPopping( int nThreads, int nItems ) {
     }
 
     std::vector< std::thread > threads( nThreads );
-	std::vector< std::vector< int > > itemVectors( nThreads );
+	std::vector< std::vector< T > > itemVectors( nThreads );
 
     for ( int i = 0; i < nThreads; i++ ) {
-        threads[ i ] = std::thread( popData, std::ref( testQueue ), std::ref( itemVectors[ i ] ) );
+        threads[ i ] = std::thread( popData< TemplateTypeBase >, std::ref( testQueue ), std::ref( itemVectors[ i ] ) );
         threads[ i ].join( );
     }
 
-	std::vector< int > items;
+	std::vector< T > items;
 
     for ( int i = 0; i < nThreads; i++ ) {
 		items.insert( std::end( items ), std::begin( itemVectors[ i ] ), std::end( itemVectors[ i ] ) );
@@ -127,7 +164,7 @@ bool testPopping( int nThreads, int nItems ) {
 	}
 
     for ( int i = 0; i < nItems; i++ ) {
-		if ( items[ i ] != i ) {
+		if ( items[ i ].getID( ) != i ) {
 			std::cout << "test2:  Somehow, we don't have the items we inserted!" << std::endl;
 			bSuccess = false;
 			break;
@@ -140,19 +177,19 @@ bool testPopping( int nThreads, int nItems ) {
 
 int main( int argc, char * argv[ ] ) {
 	// step 1, test inserting
-	std::cout << "Test 1 " << ( testInserting( 1, 100 ) ? "is successful" : "failed" ) << std::endl;
-	std::cout << "Test 2 " << ( testInserting( 2, 10000 ) ? "is successful" : "failed" ) << std::endl;
-	std::cout << "Test 3 " << ( testInserting( 10, 10000 ) ? "is successful" : "failed" ) << std::endl;
-	std::cout << "Test 4 " << ( testInserting( 100, 10000 ) ? "is successful" : "failed" ) << std::endl;
-	std::cout << "Test 5 " << ( testInserting( 1000, 10000 ) ? "is successful" : "failed" ) << std::endl;
-	std::cout << "Test 6 " << ( testInserting( 10, 1000000 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 1 " << ( testInserting< TemplateTypeBase >( 1, 100 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 2 " << ( testInserting< TemplateTypeBase >( 2, 10000 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 3 " << ( testInserting< TemplateTypeBase >( 10, 10000 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 4 " << ( testInserting< TemplateTypeBase >( 100, 10000 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 5 " << ( testInserting< TemplateTypeBase >( 1000, 10000 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 6 " << ( testInserting< TemplateTypeBase >( 10, 1000000 ) ? "is successful" : "failed" ) << std::endl;
 
-	std::cout << "Test 7 " << ( testPopping( 1, 100 ) ? "is successful" : "failed" ) << std::endl;
-	std::cout << "Test 8 " << ( testPopping( 2, 1000 ) ? "is successful" : "failed" ) << std::endl;
-	std::cout << "Test 10 " << ( testPopping( 10, 10000 ) ? "is successful" : "failed" ) << std::endl;
-	std::cout << "Test 11 " << ( testPopping( 100, 100000 ) ? "is successful" : "failed" ) << std::endl;
-	std::cout << "Test 12 " << ( testPopping( 1000, 1000000 ) ? "is successful" : "failed" ) << std::endl;
-	std::cout << "Test 13 " << ( testPopping( 10000, 10000000 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 7 " << ( testPopping< TemplateTypeBase >( 1, 100 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 8 " << ( testPopping< TemplateTypeBase >( 2, 1000 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 9 " << ( testPopping< TemplateTypeBase >( 10, 10000 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 10 " << ( testPopping< TemplateTypeBase >( 100, 100000 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 11 " << ( testPopping< TemplateTypeBase >( 1000, 1000000 ) ? "is successful" : "failed" ) << std::endl;
+	std::cout << "Test 12 " << ( testPopping< TemplateTypeBase >( 10000, 10000000 ) ? "is successful" : "failed" ) << std::endl;
 
 	return 0;
 }
