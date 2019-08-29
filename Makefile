@@ -1,4 +1,7 @@
-all : sender listener server
+all : sender listener server ConcurrentQueueTest
+
+ConcurrentQueueTest : ConcurrentQueueTest.o
+	g++ ConcurrentQueueTest.o -o ConcurrentQueueTest -lpthread
 
 sender : sender.o utils.o
 	g++ sender.o utils.o -o sender
@@ -14,6 +17,9 @@ sender.o: sender.cpp PacketData.h utils.h
 
 listener.o: listener.cpp PacketData.h utils.h
 	g++ -c listener.cpp
+
+ConcurrentQueueTest.o : ConcurrentQueueTest.cpp ConcurrentQueue.h
+	g++ -c ConcurrentQueueTest.cpp
 
 server.o : server.cpp ConcurrentQueue.h PacketData.h
 	g++ -c server.cpp
